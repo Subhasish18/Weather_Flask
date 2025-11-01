@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Check ur City Mood </title>
+  <meta name="description" content="Minimal, responsive weather page that queries a Flask API" />
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#60a5fa; --glass:rgba(255,255,255,0.04);
+      --radius:14px; --maxw:980px;
+      --fw-semi:600; --fw-normal:400;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial; background:linear-gradient(180deg,#071025 0%, #081421 60%); color:#e6eef8}
+    .page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px}
+    .app{width:100%;max-width:var(--maxw);padding:28px;border-radius:20px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 6px 30px rgba(2,6,23,0.6);backdrop-filter: blur(6px)}
+
+    header{display:flex;gap:16px;align-items:center;margin-bottom:18px}
+    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#7dd3fc);display:flex;align-items:center;justify-content:center;font-weight:700;color:#04263b}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:0;color:var(--muted);font-size:13px}
+
+    .controls{display:flex;gap:12px;margin-top:12px}
+    .search{flex:1;display:flex}
+    input[type="search"]{flex:1;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:var(--glass);color:inherit;outline:none;font-size:15px}
+    button.btn{padding:10px 14px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#7dd3fc);color:#04263b;font-weight:600;cursor:pointer}
+    button.btn:active{transform:translateY(1px)}
+
+    .content{display:grid;grid-template-columns:1fr 360px;gap:20px;margin-top:20px}
+    @media (max-width:880px){.content{grid-template-columns:1fr;}.sidebar{order:2}}
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:20px;border-radius:var(--radius);}
+    .current{display:flex;align-items:center;gap:18px}
+    .temp{font-size:48px;font-weight:700;line-height:1}
+    .desc{color:var(--muted);font-size:14px}
+    .meta{display:flex;gap:18px;margin-top:12px;color:var(--muted);font-size:13px}
+
+    .forecast{display:flex;gap:10px;margin-top:18px;overflow:auto}
+    .day{min-width:92px;padding:12px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.008));text-align:center}
+    .day small{display:block;color:var(--muted);font-size:12px}
+    .day .dtemp{font-weight:700;margin-top:8px}
+
+    .sidebar{position:relative}
+    .card.side{padding:16px}
+    .kpi{display:flex;flex-direction:column;gap:12px}
+    .kpi-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:12px;background:rgba(255,255,255,0.02)}
+    .kpi-item b{font-size:15px}
+    .attribution{margin-top:12px;color:var(--muted);font-size:12px}
+
+    .hidden{display:none !important}
+    .center{display:flex;align-items:center;justify-content:center}
+    .loader{width:36px;height:36px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+
+  </style>
+</head>
+<body>
+  <div class="page">
+    <main class="app" role="main">
+      <header>
+        <div class="logo">🧭</div>
+        <div>
+          <h1>What's the Mood -- I mean weather!</h1>
+          <p class="lead">Type a city name and  fetch live weather.</p>
+        </div>
+      </header>
+
+      <form id="searchForm" class="controls" onsubmit="return false;">
+        <div class="search">
+          <input id="q" type="search" placeholder="Enter city (e.g. Kolkata, London)" aria-label="city name" value="Kolkata">
+        </div>
+        <div>
+          <button id="searchBtn" class="btn">Get Weather</button>
+        </div>
+      </form>
+
+      <section class="content">
+        <div class="card main-card">
+          <div id="mainState" class="center">
+            <div id="loader" class="loader"></div>
+          </div>
+
+          <div id="weatherView" class="hidden">
+            <div class="current">
+              <div>
+                <div id="location" style="font-weight:700;font-size:18px"></div>
+                <div id="desc" class="desc"></div>
+              </div>
+              <div style="margin-left:auto;text-align:right">
+                <div id="temp" class="temp">--°C</div>
+                <div id="feels" class="desc" style="margin-top:4px"></div>
+              </div>
+            </div>
+
+            <div class="meta">
+              <div>💧 <span id="humidity">--</span>%</div>
+              <div>🌬️ <span id="wind">--</span> kph</div>
+              <div id="updated" style="margin-left:auto;color:var(--muted);font-size:13px">--</div>
+            </div>
+
+            <div class="forecast" id="forecast"></div>
+          </div>
+
+          <div id="error" class="hidden" style="padding:18px;color:#ffccd5;background:rgba(255,0,0,0.06);border-radius:12px;margin-top:14px">Couldn't load weather. Try another city.</div>
+        </div>
+
+        <aside class="sidebar">
+          <div class="card side">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:700">Quick Info</div>
+              <div style="font-size:12px;color:var(--muted)">Local time: <span id="localTime">--:--</span></div>
+            </div>
+
+            <div class="kpi" style="margin-top:12px">
+              <div class="kpi-item"><span>Visibility</span><b id="visibility">--</b></div>
+              <div class="kpi-item"><span>Pressure</span><b id="pressure">--</b></div>
+              <div class="kpi-item"><span>Sunrise</span><b id="sunrise">--</b></div>
+              <div class="kpi-item"><span>Sunset</span><b id="sunset">--</b></div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+  function fmtDateISO(d){
+    const dt = new Date(d);
+    return dt.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
+  }
+
+  function showLoader(show){
+    document.getElementById('loader').style.display = show ? 'block' : 'none';
+    document.getElementById('mainState').style.display = show ? 'flex' : 'none';
+  }
+
+  function showError(msg){
+    const el = document.getElementById('error');
+    el.textContent = msg || 'Could not load weather. Try a different city.';
+    el.classList.remove('hidden');
+    document.getElementById('weatherView').classList.add('hidden');
+    showLoader(false);
+  }
+
+  function clearError(){
+    document.getElementById('error').classList.add('hidden');
+  }
+
+  let currentCity = document.getElementById('q').value.trim() || 'Kolkata';
+  const AUTO_REFRESH_MS = 3 * 60 * 1000; 
+  let autoRefreshTimer = null;
+
+  function startAutoRefresh(){
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(() => {
+      if (currentCity) {
+        fetchWeather(currentCity, { auto: true }).catch(err => console.error('Auto-refresh error', err));
+      }
+    }, AUTO_REFRESH_MS);
+  }
+
+  function stopAutoRefresh(){
+    if (autoRefreshTimer){
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  async function fetchWeather(city, { auto = false } = {}){
+    if(!city) return;
+    const url = `/api/weather?city=${encodeURIComponent(city)}`;
+    try{
+      if(!auto){    
+        currentCity = city;
+        clearError();
+        showLoader(true);
+      } else {
+
+      }
+
+      const res = await fetch(url, {cache: 'no-store'});
+      if(!res.ok){
+        const errText = await res.text().catch(()=>null);
+        if(!auto) showError('Unable to fetch weather. Make sure your Flask API is running and CORS allows requests.');
+        throw new Error('Network response not ok: ' + errText);
+      }
+      const data = await res.json();
+
+      if(!auto){
+        showLoader(false);
+        startAutoRefresh();
+      }
+
+      renderWeather(data);
+    }catch(err){
+      console.error(err);
+      if(!auto){
+        showError('Unable to fetch weather. Make sure your Flask API is running and CORS allows requests.');
+      }
+    }
+  }
+
+  function renderWeather(data){
+    if(!data){ showError(); return; }
+    const name = data.name || (data.city && data.city.name) || 'Unknown';
+    const country = data.country || (data.sys && data.sys.country) || '';
+    const temp = ('temp_c' in data) ? data.temp_c : (data.main && data.main.temp);
+    const feels = data.feels_like_c || (data.main && data.main.feels_like);
+    const desc = data.description || (data.weather && data.weather[0] && data.weather[0].description) || '';
+    const humidity = data.humidity || (data.main && data.main.humidity) || '--';
+    const wind = (data.wind_kph !== undefined) ? data.wind_kph : (data.wind && data.wind.speed) || '--';
+
+    document.getElementById('location').textContent = `${name}${country ? ', '+country : ''}`;
+    document.getElementById('desc').textContent = desc;
+    document.getElementById('temp').textContent = (temp !== undefined) ? `${Math.round(temp)}°C` : '--';
+    document.getElementById('feels').textContent = (feels !== undefined) ? `Feels like ${Math.round(feels)}°C` : '';
+    document.getElementById('humidity').textContent = humidity;
+    document.getElementById('wind').textContent = wind;
+    document.getElementById('updated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+
+    document.getElementById('visibility').textContent = data.visibility || (data.visibility_meters && `${data.visibility_meters} m`) || '--';
+    document.getElementById('pressure').textContent = data.pressure || (data.main && data.main.pressure) || '--';
+    document.getElementById('sunrise').textContent = data.sunrise ? new Date(data.sunrise*1000).toLocaleTimeString() : (data.sys && data.sys.sunrise ? new Date(data.sys.sunrise*1000).toLocaleTimeString() : '--');
+    document.getElementById('sunset').textContent = data.sunset ? new Date(data.sunset*1000).toLocaleTimeString() : (data.sys && data.sys.sunset ? new Date(data.sys.sunset*1000).toLocaleTimeString() : '--');
+
+    const fwrap = document.getElementById('forecast'); fwrap.innerHTML = '';
+    const forecast = data.forecast || data.daily || [];
+    if(Array.isArray(forecast) && forecast.length){
+      forecast.slice(0,6).forEach(day =>{
+        const d = document.createElement('div'); d.className='day';
+        const dateLabel = day.date ? fmtDateISO(day.date) : (day.dt ? fmtDateISO(day.dt*1000) : '');
+        const tempLabel = ('temp_c' in day) ? `${Math.round(day.temp_c)}°C` : (day.temp ? `${Math.round(day.temp)}°C` : (day.max ? `${Math.round(day.max)}°C` : '--'));
+        const descLabel = day.description || (day.weather && day.weather[0] && day.weather[0].description) || '';
+        d.innerHTML = `<small>${dateLabel}</small><div style="margin-top:8px">${descLabel}</div><div class="dtemp">${tempLabel}</div>`;
+        fwrap.appendChild(d);
+      });
+    }
+
+    document.getElementById('weatherView').classList.remove('hidden');
+    document.getElementById('error').classList.add('hidden');
+    document.getElementById('localTime').textContent = new Date().toLocaleTimeString();
+  }
+
+  document.getElementById('searchBtn').addEventListener('click', ()=>{
+    const q = document.getElementById('q').value.trim();
+    if(!q) return;
+    fetchWeather(q); 
+  });
+
+  document.getElementById('q').addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('searchBtn').click(); }});
+
+  window.addEventListener('load', ()=>{
+    const defaultCity = document.getElementById('q').value || 'Kolkata';
+    setTimeout(()=>fetchWeather(defaultCity), 250); 
+  });
+
+  window.addEventListener('beforeunload', ()=>{ stopAutoRefresh(); });
+  </script>
+</body>
+</html>
